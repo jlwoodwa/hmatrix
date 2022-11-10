@@ -88,6 +88,7 @@ import qualified Numeric.LinearAlgebra as LA
 import qualified Numeric.LinearAlgebra.Devel as LA
 import Data.Proxy(Proxy(..))
 import Internal.Static
+import Internal.Numeric (addConstant)
 import Control.Arrow((***))
 import Text.Printf
 import Data.Type.Equality ((:~:)(Refl))
@@ -562,7 +563,7 @@ meanCov (extract -> vs) = mkR *** (Sym . mkL . LA.unSym) $ LA.meanCov vs
 
 --------------------------------------------------------------------------------
 
-class Domain field vec mat | mat -> vec field, vec -> mat field, field -> mat vec
+class Num field => Domain field vec mat | mat -> vec field, vec -> mat field, field -> mat vec
   where
     mul :: forall m k n. (KnownNat m, KnownNat k, KnownNat n) => mat m k -> mat k n -> mat m n
     app :: forall m n . (KnownNat m, KnownNat n) => mat m n -> vec n -> vec m
@@ -570,7 +571,15 @@ class Domain field vec mat | mat -> vec field, vec -> mat field, field -> mat ve
     cross :: vec 3 -> vec 3 -> vec 3
     diagR ::  forall m n k . (KnownNat m, KnownNat n, KnownNat k) => field -> vec k -> mat m n
     dvmap :: forall n. KnownNat n => (field -> field) -> vec n -> vec n
+    dvadd :: forall n. KnownNat n => field -> vec n -> vec n
+    dvadd x = dvmap (+ x)
+    dvmul :: forall n. KnownNat n => field -> vec n -> vec n
+    dvmul x = dvmap (* x)
     dmmap :: forall n m. (KnownNat m, KnownNat n) => (field -> field) -> mat n m -> mat n m
+    dmadd :: forall n m. (KnownNat m, KnownNat n) => field -> mat n m -> mat n m
+    dmadd x = dmmap (+ x)
+    dmmul :: forall n m. (KnownNat m, KnownNat n) => field -> mat n m -> mat n m
+    dmmul x = dmmap (* x)
     outer :: forall n m. (KnownNat m, KnownNat n) => vec n -> vec m -> mat n m
     zipWithVector :: forall n. KnownNat n => (field -> field -> field) -> vec n -> vec n -> vec n
     det :: forall n. KnownNat n => mat n n -> field
@@ -588,7 +597,11 @@ instance Domain ℝ R L
     cross = crossR
     diagR = diagRectR
     dvmap = mapR
+    dvadd = dvaddR
+    dvmul = dvmulR
     dmmap = mapL
+    dmadd = dvaddL
+    dmmul = dvmulL
     outer = outerR
     zipWithVector = zipWithR
     det = detL
@@ -605,7 +618,11 @@ instance Domain ℂ C M
     cross = crossC
     diagR = diagRectC
     dvmap = mapC
+    dvadd = dvaddC
+    dvmul = dvmulC
     dmmap = mapM'
+    dmadd = dvaddM
+    dmmul = dvmulM
     outer = outerC
     zipWithVector = zipWithC
     det = detM
@@ -656,11 +673,23 @@ outerR (extract -> x) (extract -> y) = mkL (LA.outer x y)
 mapR :: KnownNat n => (ℝ -> ℝ) -> R n -> R n
 mapR f (unwrap -> v) = mkR (LA.cmap f v)
 
+dvaddR :: KnownNat n => ℝ -> R n -> R n
+dvaddR x (unwrap -> v) = mkR (addConstant x v)
+
+dvmulR :: KnownNat n => ℝ -> R n -> R n
+dvmulR x (unwrap -> v) = mkR (LA.scale x v)
+
 zipWithR :: KnownNat n => (ℝ -> ℝ -> ℝ) -> R n -> R n -> R n
 zipWithR f (extract -> x) (extract -> y) = mkR (LA.zipVectorWith f x y)
 
 mapL :: (KnownNat n, KnownNat m) => (ℝ -> ℝ) -> L n m -> L n m
 mapL f = overMatL' (LA.cmap f)
+
+dvaddL :: (KnownNat n, KnownNat m) => ℝ -> L n m -> L n m
+dvaddL x = overMatL' (addConstant x)
+
+dvmulL :: (KnownNat n, KnownNat m) => ℝ -> L n m -> L n m
+dvmulL x = overMatL' (LA.scale x)
 
 detL :: KnownNat n => Sq n -> ℝ
 detL = LA.det . unwrap
@@ -719,11 +748,23 @@ outerC (extract -> x) (extract -> y) = mkM (LA.outer x y)
 mapC :: KnownNat n => (ℂ -> ℂ) -> C n -> C n
 mapC f (unwrap -> v) = mkC (LA.cmap f v)
 
+dvaddC :: KnownNat n => ℂ -> C n -> C n
+dvaddC x (unwrap -> v) = mkC (addConstant x v)
+
+dvmulC :: KnownNat n => ℂ -> C n -> C n
+dvmulC x (unwrap -> v) = mkC (LA.scale x v)
+
 zipWithC :: KnownNat n => (ℂ -> ℂ -> ℂ) -> C n -> C n -> C n
 zipWithC f (extract -> x) (extract -> y) = mkC (LA.zipVectorWith f x y)
 
 mapM' :: (KnownNat n, KnownNat m) => (ℂ -> ℂ) -> M n m -> M n m
 mapM' f = overMatM' (LA.cmap f)
+
+dvaddM :: (KnownNat n, KnownNat m) => ℂ -> M n m -> M n m
+dvaddM x = overMatM' (addConstant x)
+
+dvmulM :: (KnownNat n, KnownNat m) => ℂ -> M n m -> M n m
+dvmulM x = overMatM' (LA.scale x)
 
 detM :: KnownNat n => M n n -> ℂ
 detM = LA.det . unwrap
